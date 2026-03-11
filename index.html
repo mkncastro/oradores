@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+
+<meta charset="UTF-8">
+<title>Planejador de Oradores</title>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf"></script>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f2f4f7;
+margin:0;
+padding:30px;
+}
+
+.container{
+max-width:1100px;
+margin:auto;
+background:white;
+padding:30px;
+border-radius:8px;
+}
+
+h1{
+margin-top:0;
+}
+
+textarea{
+width:100%;
+height:120px;
+}
+
+input,select{
+padding:6px;
+margin:5px 0;
+}
+
+button{
+padding:10px 15px;
+margin:5px;
+background:#2563eb;
+color:white;
+border:none;
+border-radius:4px;
+cursor:pointer;
+}
+
+button:hover{
+background:#1e4fd1;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:20px;
+}
+
+th,td{
+border:1px solid #ddd;
+padding:8px;
+}
+
+th{
+background:#eee;
+}
+
+.bloqueado{
+background:#ffd6d6;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Gerador Avançado de Escala de Oradores</h1>
+
+<h3>Oradores</h3>
+
+<textarea id="oradores"></textarea>
+
+<button onclick="salvarOradores()">Salvar Oradores</button>
+
+<h3>Configuração</h3>
+
+Primeira data
+<input type="date" id="dataInicial">
+
+Dia
+
+<select id="dia">
+
+<option value="0">Domingo</option>
+<option value="6">Sábado</option>
+
+</select>
+
+<button onclick="gerarEscala()">Gerar Escala</button>
+
+<h3>Bloquear Datas</h3>
+
+<input type="date" id="dataBloqueio">
+
+<button onclick="bloquearData()">Adicionar Bloqueio</button>
+
+<ul id="listaBloqueios"></ul>
+
+<h3>Escala</h3>
+
+<button onclick="exportarExcel()">Exportar Excel</button>
+<button onclick="exportarPDF()">Exportar PDF</button>
+<button onclick="resetar()">Resetar</button>
+
+<table id="tabela">
+
+<thead>
+
+<tr>
+<th>Data</th>
+<th>Orador</th>
+</tr>
+
+</thead>
+
+<tbody></tbody>
+
+</table>
+
+</div>
+
+<script>
+
+let escala=[]
+let bloqueios=[]
+
+window.onload=function(){
+
+let oradoresSalvos=localStorage.getItem("oradores")
+
+if(oradoresSalvos){
+
+document.getElementById("oradores").value=oradoresSalvos
+
+}
+
+let bloqueiosSalvos=localStorage.getItem("bloqueios")
+
+if(bloqueiosSalvos){
+
+bloqueios=JSON.parse(bloqueiosSalvos)
+renderBloqueios()
+
+}
+
+}
+
+function salvarOradores(){
+
+localStorage.setItem("oradores",
+document.getElementById("oradores").value)
+
+alert("Oradores salvos")
+
+}
+
+function bloquearData(){
+
+let data=document.getElementById("dataBloqueio").value
+
+bloqueios.push(data)
+
+localStorage.setItem("bloqueios",
+JSON.stringify(bloqueios))
+
+renderBloqueios()
+
+}
+
+function renderBloqueios(){
+
+let ul=document.getElementById("listaBloqueios")
+
+ul.innerHTML=""
+
+bloqueios.forEach(d=>{
+
+let li=document.createElement("li")
+
+li.innerText=new Date(d).toLocaleDateString('pt-BR')
+
+ul.appendChild(li)
+
+})
+
+}
+
+function gerarEscala(){
+
+let nomes=document.getElementById("oradores")
+.value
+.split("\n")
+.map(n=>n.trim())
+.filter(n=>n)
+
+let dataInicial=new Date(
+document.getElementById("dataInicial").value)
+
+let diaSemana=parseInt(
+document.getElementById("dia").value)
+
+while(dataInicial.getDay()!=diaSemana){
+
+dataInicial.setDate(dataInicial.getDate()+1)
+
+}
+
+let tabela=document.querySelector("#tabela tbody")
+
+tabela.innerHTML=""
+
+escala=[]
+
+let indice=0
+let ultimoOrador=""
+
+for(let i=0;i<26;i++){
+
+let data=new Date(dataInicial)
+
+data.setDate(data.getDate()+i*7)
+
+let dataISO=data.toISOString().split("T")[0]
+
+let orador=""
+
+if(bloqueios.includes(dataISO)){
+
+orador="--- BLOQUEADO ---"
+
+}else{
+
+orador=nomes[indice]
+
+if(orador==ultimoOrador){
+
+indice++
+orador=nomes[indice%nomes.length]
+
+}
+
+ultimoOrador=orador
+
+indice++
+
+}
+
+let tr=document.createElement("tr")
+
+if(orador.includes("BLOQUEADO")){
+
+tr.classList.add("bloqueado")
+
+}
+
+tr.innerHTML=`
+
+<td>${data.toLocaleDateString('pt-BR')}</td>
+<td>${orador}</td>
+
+`
+
+tabela.appendChild(tr)
+
+escala.push({
+
+data:data.toLocaleDateString('pt-BR'),
+orador:orador
+
+})
+
+}
+
+}
+
+function exportarExcel(){
+
+let ws=XLSX.utils.json_to_sheet(escala)
+
+let wb=XLSX.utils.book_new()
+
+XLSX.utils.book_append_sheet(wb,ws,"Escala")
+
+XLSX.writeFile(wb,"escala_oradores.xlsx")
+
+}
+
+function exportarPDF(){
+
+let doc=new jspdf.jsPDF()
+
+let y=10
+
+doc.text("Escala de Oradores",10,y)
+
+y+=10
+
+escala.forEach(l=>{
+
+doc.text(`${l.data} - ${l.orador}`,10,y)
+
+y+=8
+
+})
+
+doc.save("escala_oradores.pdf")
+
+}
+
+function resetar(){
+
+if(confirm("Limpar escala?")){
+
+document.querySelector("#tabela tbody").innerHTML=""
+
+escala=[]
+
+}
+
+}
+
+</script>
+
+</body>
+</html>
